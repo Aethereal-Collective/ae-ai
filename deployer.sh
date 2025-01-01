@@ -1,4 +1,4 @@
-IMAGE_NAME="nama_image_anda"
+IMAGE_NAME="ae-ai"
 HOST_PORT=5003
 CONTAINER_PORT=5003
 PROJECT_DIR="$(pwd)"

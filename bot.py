@@ -53,51 +53,53 @@ async def search_web(query, num_results=2):
             try:
                 title = r.get('title', 'No Title')
                 body = r.get('body', 'No Content')
-                formatted_results.append(f"{i}. {title}\n   {body}\n")
+                formatted_results.append("{0}. {1}\n   {2}\n".format(i, title, body))
             except Exception as e:
-                print(f"Error memformat hasil {i}: {e}")
+                print("Error memformat hasil {0}: {1}".format(i, e))
                 continue
         
         return "\n".join(formatted_results) if formatted_results else ""
     except Exception as e:
-        print(f"Error dalam pencarian web: {e}")
+        print("Error dalam pencarian web: {0}".format(e))
         return ""
 
 @bot.event
 async def on_ready():
-    print(f"{bot.user} telah berhasil login!")
-    print(f"Bot tersedia di {len(bot.guilds)} server")
+    print("{0} telah berhasil login!".format(bot.user))
+    print("Bot tersedia di {0} server".format(len(bot.guilds)))
     for guild in bot.guilds:
-        print(f"- {guild.name} (id: {guild.id})")
+        print("- {0} (id: {1})".format(guild.name, guild.id))
 
 @bot.event
 async def on_guild_join(guild):
     for channel in guild.text_channels:
         if channel.permissions_for(guild.me).send_messages:
             await channel.send(
-                f"Halo! Saya adalah {os.getenv('BOT_NAME', 'Astronode AI')}! 👋\n"
-                f"Saya siap membantu menjawab pertanyaan Anda. Mention saya dan ajukan pertanyaan Anda!\n"
-                f"Contoh: @{bot.user.name} Apa itu Cryptocurrency?\n"
-                f"Ketik `{os.getenv('COMMAND_PREFIX', '!')}bantuan` untuk melihat panduan penggunaan."
+                "Halo! Saya adalah {0}! 👋\n"
+                "Saya siap membantu menjawab pertanyaan Anda. Mention saya dan ajukan pertanyaan Anda!\n"
+                "Contoh: @{1} Apa itu Cryptocurrency?\n"
+                "Ketik `{2}bantuan` untuk melihat panduan penggunaan.".format(
+                    os.getenv('BOT_NAME', 'Astronode AI'), bot.user.name, os.getenv('COMMAND_PREFIX', '!')
+                )
             )
             break
 
 @bot.command(name='bantuan')
 async def help_command(ctx):
     help_text = (
-        f"🤖 **Panduan Penggunaan {os.getenv('BOT_NAME', 'Astronode AI')}**\n\n"
+        "🤖 **Panduan Penggunaan {0}**\n\n"
         "1️⃣ **Cara Bertanya:**\n"
-        f"- Mention @{bot.user.name} diikuti pertanyaan Anda\n"
-        f"- Contoh: @{bot.user.name} Jelaskan tentang AI\n\n"
+        "- Mention @{1} diikuti pertanyaan Anda\n"
+        "- Contoh: @{1} Jelaskan tentang AI\n\n"
         "2️⃣ **Fitur Pencarian Web:**\n"
         "- Bot akan otomatis mencari informasi terbaru dari web\n"
         "- Hasil pencarian akan digunakan untuk memberikan jawaban yang akurat\n\n"
         "3️⃣ **Perintah Tersedia:**\n"
-        f"- `{os.getenv('COMMAND_PREFIX', '!')}bantuan` - Menampilkan panduan ini\n\n"
+        "- `{2}bantuan` - Menampilkan panduan ini\n\n"
         "4️⃣ **Tips:**\n"
         "- Berikan pertanyaan yang jelas dan spesifik\n"
         "- Bot akan memberikan sumber informasi jika relevan"
-    )
+    ).format(os.getenv('BOT_NAME', 'Astronode AI'), bot.user.name, os.getenv('COMMAND_PREFIX', '!'))
     await ctx.send(help_text)
 
 @bot.event
@@ -109,7 +111,7 @@ async def on_message(message):
     
     if bot.user.mentioned_in(message):
         # Cek apakah pesan sedang diproses
-        message_id = f"{message.channel.id}_{message.id}"
+        message_id = "{0}_{1}".format(message.channel.id, message.id)
         if message_id in processing_lock:
             return
         
@@ -119,7 +121,7 @@ async def on_message(message):
         try:
             async with message.channel.typing():
                 # Hapus mention dari pesan
-                content = message.clean_content.replace(f'@{bot.user.name}', '').strip()
+                content = message.clean_content.replace("@{0}".format(bot.user.name), "").strip()
                 
                 if not content:
                     await message.reply("Halo! Ada yang bisa saya bantu? 😊")
@@ -132,9 +134,13 @@ async def on_message(message):
                     # Gabungkan hasil pencarian dengan prompt sistem
                     system_prompt = os.getenv('SYSTEM_PROMPT', 'Anda adalah asisten AI yang membantu.')
                     combined_prompt = (
-                        f"{system_prompt}\n\n"
-                        f"{'Informasi dari web:\n' + search_results if search_results else ''}"
-                        f"Pertanyaan user: {content}"
+                        "{0}\n\n"
+                        "{1}"
+                        "Pertanyaan user: {2}".format(
+                            system_prompt,
+                            "Informasi dari web:\n{0}\n".format(search_results) if search_results else "",
+                            content
+                        )
                     )
                     
                     # Dapatkan respons dari OpenAI
@@ -160,7 +166,7 @@ async def on_message(message):
                         await message.reply(bot_response)
                         
                 except Exception as e:
-                    print(f"Error: {str(e)}")
+                    print("Error: {0}".format(str(e)))
                     if "rate limit" in str(e).lower():
                         await message.reply(
                             "Maaf, saya sedang sibuk melayani banyak permintaan. "
