@@ -75,10 +75,10 @@ async def on_guild_join(guild):
     for channel in guild.text_channels:
         if channel.permissions_for(guild.me).send_messages:
             await channel.send(
-                f'Halo! Saya adalah {os.getenv("BOT_NAME", "Astronode AI")}! 👋\n'
-                f'Saya siap membantu menjawab pertanyaan Anda. Mention saya dan ajukan pertanyaan Anda!\n'
-                f'Contoh: @{bot.user.name} Apa itu Cryptocurrency?\n'
-                f'Ketik `{os.getenv("COMMAND_PREFIX", "!")}bantuan` untuk melihat panduan penggunaan.'
+                f"Halo! Saya adalah {os.getenv('BOT_NAME', 'Astronode AI')}! 👋\n"
+                f"Saya siap membantu menjawab pertanyaan Anda. Mention saya dan ajukan pertanyaan Anda!\n"
+                f"Contoh: @{bot.user.name} Apa itu Cryptocurrency?\n"
+                f"Ketik `{os.getenv('COMMAND_PREFIX', '!')}bantuan` untuk melihat panduan penggunaan."
             )
             break
 
@@ -176,4 +176,4 @@ async def on_message(message):
             if message_id in processing_lock:
                 del processing_lock[message_id]
 
-bot.run(os.getenv('DISCORD_TOKEN')) 
+bot.run(os.getenv('DISCORD_TOKEN'))
