@@ -1,145 +1,179 @@
+import os
 import discord
+from dotenv import load_dotenv
 from discord.ext import commands
-from openai import OpenAI
+import openai
+from duckduckgo_search import DDGS
 import asyncio
-import logging
+import time
+from random import uniform
 
-import config
+load_dotenv()
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Konfigurasi
-DISCORD_TOKEN = config.DISCORD_TOKEN
-DEEPSEEK_API_KEY = config.DEEPSEEK_API_KEY
-DEEPSEEK_BASE_URL = config.DEEPSEEK_BASE_URL
-
-# Inisialisasi bot dengan semua intents
+# Konfigurasi bot
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix=os.getenv('COMMAND_PREFIX', '!'), intents=intents)
 
-# Inisialisasi Deepseek client
-deepseek_client = OpenAI(
-    api_key=DEEPSEEK_API_KEY,
-    base_url=DEEPSEEK_BASE_URL
+# Konfigurasi OpenAI
+openai_client = openai.OpenAI(
+    api_key=os.getenv('OPENAI_API_KEY'),
+    base_url=os.getenv('OPENAI_BASE_URL')
 )
+
+# Lock untuk mencegah multiple responses
+processing_lock = {}
+
+async def search_with_retry(query, max_retries=3):
+    """Melakukan pencarian dengan retry mechanism"""
+    for attempt in range(max_retries):
+        try:
+            with DDGS() as ddgs:
+                await asyncio.sleep(uniform(1, 3))
+                results = list(ddgs.text(query, max_results=2))
+                return results
+        except Exception as e:
+            if "Ratelimit" in str(e) and attempt < max_retries - 1:
+                await asyncio.sleep(5 * (attempt + 1))
+                continue
+            raise e
+    return []
+
+async def search_web(query, num_results=2):
+    """Melakukan pencarian web menggunakan DuckDuckGo"""
+    try:
+        if len(query.strip()) < 10:
+            return ""
+
+        results = await search_with_retry(query)
+        if not results:
+            return ""
+        
+        formatted_results = []
+        for i, r in enumerate(results, 1):
+            try:
+                title = r.get('title', 'No Title')
+                body = r.get('body', 'No Content')
+                formatted_results.append(f"{i}. {title}\n   {body}\n")
+            except Exception as e:
+                print(f"Error memformat hasil {i}: {e}")
+                continue
+        
+        return "\n".join(formatted_results) if formatted_results else ""
+    except Exception as e:
+        print(f"Error dalam pencarian web: {e}")
+        return ""
 
 @bot.event
 async def on_ready():
-    """Event yang dipanggil ketika bot siap"""
-    logger.info(f'{bot.user} telah berhasil login!')
-    logger.info(f'Bot tersedia di {len(bot.guilds)} server')
-    
-    # Menampilkan daftar server
+    print(f"{bot.user} telah berhasil login!")
+    print(f"Bot tersedia di {len(bot.guilds)} server")
     for guild in bot.guilds:
-        logger.info(f'- {guild.name} (id: {guild.id})')
-        logger.info(f'  - Member count: {guild.member_count}')
-        logger.info(f'  - Owner: {guild.owner}')
-    
-    await bot.change_presence(activity=discord.Game(name="!bantuan"))
+        print(f"- {guild.name} (id: {guild.id})")
 
 @bot.event
 async def on_guild_join(guild):
-    """Event yang dipanggil ketika bot bergabung ke server baru"""
-    logger.info(f'Bot bergabung ke server baru: {guild.name} (id: {guild.id})')
-    logger.info(f'- Member count: {guild.member_count}')
-    logger.info(f'- Owner: {guild.owner}')
-    
-    # Mencoba mengirim pesan perkenalan ke channel umum
-    try:
-        # Mencari channel yang sesuai untuk mengirim pesan
-        for channel in guild.text_channels:
-            if channel.permissions_for(guild.me).send_messages:
-                welcome_text = f"""
-Halo semuanya! 👋
-Saya adalah Aethereal AI, asisten AI yang siap membantu Anda.
+    for channel in guild.text_channels:
+        if channel.permissions_for(guild.me).send_messages:
+            await channel.send(
+                f'Halo! Saya adalah {os.getenv("BOT_NAME", "Astronode AI")}! 👋\n'
+                f'Saya siap membantu menjawab pertanyaan Anda. Mention saya dan ajukan pertanyaan Anda!\n'
+                f'Contoh: @{bot.user.name} Apa itu Cryptocurrency?\n'
+                f'Ketik `{os.getenv("COMMAND_PREFIX", "!")}bantuan` untuk melihat panduan penggunaan.'
+            )
+            break
 
-Untuk menggunakan saya:
-1. Mention @{bot.user.name} diikuti dengan pertanyaan Anda
-   Contoh: @{bot.user.name} Apa itu Python?
-
-2. Ketik `!bantuan` untuk melihat panduan lengkap
-
-Saya akan merespons dalam Bahasa Indonesia 🇮🇩
-"""
-                await channel.send(welcome_text)
-                break
-    except Exception as e:
-        logger.error(f"Error saat mengirim pesan perkenalan: {str(e)}")
+@bot.command(name='bantuan')
+async def help_command(ctx):
+    help_text = (
+        f"🤖 **Panduan Penggunaan {os.getenv('BOT_NAME', 'Astronode AI')}**\n\n"
+        "1️⃣ **Cara Bertanya:**\n"
+        f"- Mention @{bot.user.name} diikuti pertanyaan Anda\n"
+        f"- Contoh: @{bot.user.name} Jelaskan tentang AI\n\n"
+        "2️⃣ **Fitur Pencarian Web:**\n"
+        "- Bot akan otomatis mencari informasi terbaru dari web\n"
+        "- Hasil pencarian akan digunakan untuk memberikan jawaban yang akurat\n\n"
+        "3️⃣ **Perintah Tersedia:**\n"
+        f"- `{os.getenv('COMMAND_PREFIX', '!')}bantuan` - Menampilkan panduan ini\n\n"
+        "4️⃣ **Tips:**\n"
+        "- Berikan pertanyaan yang jelas dan spesifik\n"
+        "- Bot akan memberikan sumber informasi jika relevan"
+    )
+    await ctx.send(help_text)
 
 @bot.event
 async def on_message(message):
-    """Event yang dipanggil ketika ada pesan baru"""
-    # Mengabaikan pesan dari bot
     if message.author == bot.user:
         return
 
-    # Memeriksa apakah pesan dimulai dengan prefix
-    if message.content.startswith(bot.command_prefix):
-        await bot.process_commands(message)
-        return
-
-    # Memeriksa apakah bot di-mention
+    await bot.process_commands(message)
+    
     if bot.user.mentioned_in(message):
-        async with message.channel.typing():
-            try:
-                # Menghapus mention dari pesan
-                prompt = message.content.replace(f'<@{bot.user.id}>', '').strip()
+        # Cek apakah pesan sedang diproses
+        message_id = f"{message.channel.id}_{message.id}"
+        if message_id in processing_lock:
+            return
+        
+        # Set lock
+        processing_lock[message_id] = True
+        
+        try:
+            async with message.channel.typing():
+                # Hapus mention dari pesan
+                content = message.clean_content.replace(f'@{bot.user.name}', '').strip()
                 
-                logger.info(f"Menerima prompt dari {message.author} di {message.guild.name}: {prompt}")
-                
-                # Mendapatkan respons dari Deepseek
-                response = deepseek_client.chat.completions.create(
-                    model="deepseek-chat",
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant. Please respond in Indonesian language."},
-                        {"role": "user", "content": prompt}
-                    ]
-                )
-                
-                response_text = response.choices[0].message.content
-                
-                # Memecah respons yang panjang
-                while response_text:
-                    if len(response_text) <= 2000:
-                        await message.reply(response_text)
-                        break
+                if not content:
+                    await message.reply("Halo! Ada yang bisa saya bantu? 😊")
+                    return
+
+                try:
+                    # Lakukan pencarian web jika pesan cukup panjang
+                    search_results = await search_web(content) if len(content) >= 10 else ""
+                    
+                    # Gabungkan hasil pencarian dengan prompt sistem
+                    system_prompt = os.getenv('SYSTEM_PROMPT', 'Anda adalah asisten AI yang membantu.')
+                    combined_prompt = (
+                        f"{system_prompt}\n\n"
+                        f"{'Informasi dari web:\n' + search_results if search_results else ''}"
+                        f"Pertanyaan user: {content}"
+                    )
+                    
+                    # Dapatkan respons dari OpenAI
+                    completion = openai_client.chat.completions.create(
+                        model="deepseek-chat",
+                        messages=[
+                            {"role": "system", "content": combined_prompt},
+                            {"role": "user", "content": content}
+                        ],
+                        temperature=0.7,
+                        max_tokens=1000
+                    )
+                    
+                    # Ambil respons
+                    bot_response = completion.choices[0].message.content
+                    
+                    # Kirim respons dalam beberapa pesan jika terlalu panjang
+                    if len(bot_response) > 2000:
+                        chunks = [bot_response[i:i+1990] for i in range(0, len(bot_response), 1990)]
+                        for chunk in chunks:
+                            await message.reply(chunk)
                     else:
-                        # Mencari titik terdekat untuk memecah pesan
-                        split_point = response_text[:2000].rfind('.')
-                        if split_point == -1:
-                            split_point = 1999
+                        await message.reply(bot_response)
                         
-                        await message.channel.send(response_text[:split_point + 1])
-                        response_text = response_text[split_point + 1:].strip()
-                        await asyncio.sleep(1)  # Delay untuk menghindari rate limiting
-                        
-            except Exception as e:
-                logger.error(f"Error saat memproses pesan: {str(e)}", exc_info=True)
-                await message.reply("Maaf, terjadi kesalahan saat memproses permintaan Anda.")
+                except Exception as e:
+                    print(f"Error: {str(e)}")
+                    if "rate limit" in str(e).lower():
+                        await message.reply(
+                            "Maaf, saya sedang sibuk melayani banyak permintaan. "
+                            "Mohon tunggu sebentar sebelum mencoba lagi."
+                        )
+                    else:
+                        await message.reply(
+                            "Maaf, saya sedang mengalami gangguan teknis. "
+                            "Mohon tunggu sebentar dan coba lagi."
+                        )
+        finally:
+            # Hapus lock setelah selesai
+            if message_id in processing_lock:
+                del processing_lock[message_id]
 
-@bot.command(name='bantuan')
-async def bantuan_command(ctx):
-    """Menampilkan bantuan penggunaan bot"""
-    help_text = f"""
-**🤖 Aethereal AI - Bantuan**
-
-Untuk menggunakan bot ini, Anda bisa:
-1. Mention @{bot.user.name} diikuti dengan pertanyaan Anda
-   Contoh: @{bot.user.name} Apa itu Cryptocurrency?
-
-2. Gunakan perintah berikut:
-   • `!bantuan` - Menampilkan bantuan ini
-
-Bot akan merespons dalam Bahasa Indonesia 🇮🇩
-"""
-    await ctx.send(help_text)
-
-# Menjalankan bot
-if __name__ == "__main__":
-    logger.info("Memulai bot...")
-    bot.run(DISCORD_TOKEN) 
+bot.run(os.getenv('DISCORD_TOKEN')) 
