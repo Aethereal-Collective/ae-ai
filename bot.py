@@ -145,7 +145,7 @@ async def on_message(message):
                     
                     # Dapatkan respons dari OpenAI
                     completion = openai_client.chat.completions.create(
-                        model="deepseek-chat",
+                        model="deepseek-reasoner",
                         messages=[
                             {"role": "system", "content": combined_prompt},
                             {"role": "user", "content": content}
