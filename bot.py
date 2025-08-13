@@ -132,11 +132,16 @@ async def on_message(message):
                     
                     # Gabungkan hasil pencarian dengan prompt sistem
                     system_prompt = os.getenv('SYSTEM_PROMPT', 'Anda adalah asisten AI yang membantu.')
+                    # Siapkan teks informasi web (jika ada hasil pencarian)
+                    info_web = f"Informasi dari web:\n{search_results}\n" if search_results else ""
+
+                    # Gabungkan prompt akhir
                     combined_prompt = (
                         f"{system_prompt}\n\n"
-                        f"{'Informasi dari web:\n' + search_results + '\n' if search_results else ''}"
+                        f"{info_web}"
                         f"Pertanyaan user: {content}"
                     )
+
                     
                     # Dapatkan respons dari Gemini API
                     response = client.models.generate_content(model="gemini-2.5-flash", contents=combined_prompt)
