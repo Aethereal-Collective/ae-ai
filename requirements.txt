@@ -4,3 +4,5 @@ openai>=1.58.1
 duckduckgo-search>=4.1.1
 beautifulsoup4>=4.12.2
 requests>=2.31.0 
+google-auth==2.40.3
+google-genai==1.29.0

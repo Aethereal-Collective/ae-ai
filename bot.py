@@ -2,23 +2,22 @@ import os
 import discord
 from dotenv import load_dotenv
 from discord.ext import commands
-import openai
+from google import genai
 from duckduckgo_search import DDGS
 import asyncio
 import time
 from random import uniform
 
+# Memuat variabel lingkungan dari file .env
 load_dotenv()
 
-# Konfigurasi bot
+# Konfigurasi bot Discord
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix=os.getenv('COMMAND_PREFIX', '!'), intents=intents)
 
-# Konfigurasi OpenAI
-openai_client = openai.OpenAI(
-    api_key=os.getenv('OPENAI_API_KEY'),
-    base_url=os.getenv('OPENAI_BASE_URL')
-)
+# --- KONFIGURASI GEMINI API ---
+# Mengatur API key dari variabel lingkungan (pastikan nama variabelnya GOOGLE_API_KEY)
+client = genai.Client()
 
 # Lock untuk mencegah multiple responses
 processing_lock = {}
@@ -65,10 +64,10 @@ async def search_web(query, num_results=2):
 
 @bot.event
 async def on_ready():
-    print("{0} telah berhasil login!".format(bot.user))
-    print("Bot tersedia di {0} server".format(len(bot.guilds)))
+    print(f"{bot.user} telah berhasil login!")
+    print(f"Bot tersedia di {len(bot.guilds)} server")
     for guild in bot.guilds:
-        print("- {0} (id: {1})".format(guild.name, guild.id))
+        print(f"- {guild.name} (id: {guild.id})")
 
 @bot.event
 async def on_guild_join(guild):
@@ -111,7 +110,7 @@ async def on_message(message):
     
     if bot.user.mentioned_in(message):
         # Cek apakah pesan sedang diproses
-        message_id = "{0}_{1}".format(message.channel.id, message.id)
+        message_id = f"{message.channel.id}_{message.id}"
         if message_id in processing_lock:
             return
         
@@ -121,7 +120,7 @@ async def on_message(message):
         try:
             async with message.channel.typing():
                 # Hapus mention dari pesan
-                content = message.clean_content.replace("@{0}".format(bot.user.name), "").strip()
+                content = message.clean_content.replace(f"@{bot.user.name}", "").strip()
                 
                 if not content:
                     await message.reply("Halo! Ada yang bisa saya bantu? 😊")
@@ -134,28 +133,16 @@ async def on_message(message):
                     # Gabungkan hasil pencarian dengan prompt sistem
                     system_prompt = os.getenv('SYSTEM_PROMPT', 'Anda adalah asisten AI yang membantu.')
                     combined_prompt = (
-                        "{0}\n\n"
-                        "{1}"
-                        "Pertanyaan user: {2}".format(
-                            system_prompt,
-                            "Informasi dari web:\n{0}\n".format(search_results) if search_results else "",
-                            content
-                        )
+                        f"{system_prompt}\n\n"
+                        f"{'Informasi dari web:\n' + search_results + '\n' if search_results else ''}"
+                        f"Pertanyaan user: {content}"
                     )
                     
-                    # Dapatkan respons dari OpenAI
-                    completion = openai_client.chat.completions.create(
-                        model="deepseek-reasoner",
-                        messages=[
-                            {"role": "system", "content": combined_prompt},
-                            {"role": "user", "content": content}
-                        ],
-                        temperature=0.7,
-                        max_tokens=1000
-                    )
+                    # Dapatkan respons dari Gemini API
+                    response = client.models.generate_content(model="gemini-2.5-flash", contents=combined_prompt)
                     
                     # Ambil respons
-                    bot_response = completion.choices[0].message.content
+                    bot_response = response.text
                     
                     # Kirim respons dalam beberapa pesan jika terlalu panjang
                     if len(bot_response) > 2000:
@@ -166,7 +153,7 @@ async def on_message(message):
                         await message.reply(bot_response)
                         
                 except Exception as e:
-                    print("Error: {0}".format(str(e)))
+                    print(f"Error: {str(e)}")
                     if "rate limit" in str(e).lower():
                         await message.reply(
                             "Maaf, saya sedang sibuk melayani banyak permintaan. "
@@ -183,3 +170,4 @@ async def on_message(message):
                 del processing_lock[message_id]
 
 bot.run(os.getenv('DISCORD_TOKEN'))
+
